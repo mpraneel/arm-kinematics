@@ -91,6 +91,13 @@ inline Manipulability manipulability(const ArmModel& model, const Eigen::VectorX
 /// Wrap to (-pi, pi].
 double wrapAngle(double a);
 Eigen::VectorXd wrapAngles(const Eigen::VectorXd& q);
+/// The joint space displacement the arm actually travels from `from` to `to`.
+/// A joint free to spin all the way round takes the shortest wrapped route; a
+/// joint with limits narrower than a full turn takes the direct route, because
+/// the shortest wrapped one would carry it straight through its own end stop.
+Eigen::VectorXd jointDelta(const ArmModel& model, const Eigen::VectorXd& from,
+                           const Eigen::VectorXd& to);
+
 /// Shortest signed angular difference a - b, wrapped.
 double angleDiff(double a, double b);
 Eigen::VectorXd angleDiff(const Eigen::VectorXd& a, const Eigen::VectorXd& b);

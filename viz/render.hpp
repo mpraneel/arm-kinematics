@@ -5,6 +5,7 @@
 #include <optional>
 #include <string>
 
+#include "arm/supervisor.hpp"
 #include "scene.hpp"
 
 namespace viz {

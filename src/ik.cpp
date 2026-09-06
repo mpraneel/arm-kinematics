@@ -121,6 +121,24 @@ std::optional<Eigen::VectorXd> nearestSolution(const AnalyticIkResult& in,
     return best;
 }
 
+std::vector<Eigen::VectorXd> ikBranches(const ArmModel& model, const Eigen::Vector2d& target,
+                                        int orientation_samples, double tol) {
+    std::vector<Eigen::VectorXd> out;
+    if (model.dof() == 2) {
+        const AnalyticIkResult r = analyticIk2R(model, target, tol);
+        return r.solutions;
+    }
+    if (model.dof() != 3) return out;
+
+    const int samples = std::max(1, orientation_samples);
+    for (int i = 0; i < samples; ++i) {
+        const double phi = -M_PI + 2.0 * M_PI * i / samples;
+        const AnalyticIkResult r = analyticIk3R(model, target, phi, tol);
+        for (const Eigen::VectorXd& q : r.solutions) out.push_back(q);
+    }
+    return out;
+}
+
 DlsResult dampedLeastSquaresIk(const ArmModel& model, const Eigen::Vector2d& target,
                                const Eigen::VectorXd& q_seed, const DlsOptions& opts) {
     const Eigen::Index rows = opts.solve_orientation ? 3 : 2;

@@ -114,6 +114,17 @@ Manipulability manipulability(const Eigen::MatrixXd& J) {
     return m;
 }
 
+Eigen::VectorXd jointDelta(const ArmModel& model, const Eigen::VectorXd& from,
+                           const Eigen::VectorXd& to) {
+    Eigen::VectorXd delta(to.size());
+    for (Eigen::Index i = 0; i < to.size(); ++i) {
+        const bool free_spinning =
+            model.joint_max[i] - model.joint_min[i] >= 2.0 * M_PI - 1e-9;
+        delta[i] = free_spinning ? wrapAngle(to[i] - from[i]) : to[i] - from[i];
+    }
+    return delta;
+}
+
 double wrapAngle(double a) {
     double x = std::fmod(a + M_PI, 2.0 * M_PI);
     if (x <= 0.0) x += 2.0 * M_PI;

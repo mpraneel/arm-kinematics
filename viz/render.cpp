@@ -321,7 +321,32 @@ void drawHud(sf::RenderTarget& t, const sf::FloatRect& box, const Scene& scene, 
     y = drawText(t, font, "collision   " + collision_text, {x, y}, 13, collision_color);
     y += 10.f;
 
-    if (scene.demo.ready()) {
+    if (scene.playback.active) {
+        const SupervisorPlayback& p = scene.playback;
+        y = drawText(t, font, "supervisor playback", {x, y}, 14, pal.text);
+        y = drawText(t, font, "  supervised", {x, y}, 12, pal.link);
+        y = drawText(t, font, "  unsupervised, same commands", {x, y}, 12, pal.link_bad);
+        y += 4.f;
+        y = drawText(t, font, "commands    " + std::to_string(p.commands), {x, y}, 13, pal.text);
+        y = drawText(t, font, "intervened  " + std::to_string(p.interventions), {x, y}, 13,
+                     pal.text);
+        y = drawText(t, font, "rejected    " + std::to_string(p.rejections), {x, y}, 13, pal.text);
+        y = drawText(t, font, "violations, unsupervised   " + std::to_string(p.raw_violations),
+                     {x, y}, 13, pal.link_bad);
+        y = drawText(t, font, "last check  " + std::string(checkName(p.last.failed_check)), {x, y},
+                     13, p.last.failed_check == arm::Check::None ? pal.text : pal.accent);
+        y = drawText(t, font, "fallback    " +
+                                  std::string(p.last.fallback_engaged
+                                                  ? fallbackName(p.last.fallback)
+                                                  : "none"),
+                     {x, y}, 13, pal.text);
+        y = drawText(t, font, "latency     " + fmt(p.last.latency_us, 2) + " us", {x, y}, 13,
+                     pal.text);
+        y += 4.f;
+        for (const std::string& line : p.events) {
+            y = drawText(t, font, "  " + line, {x, y}, 11, pal.text_dim);
+        }
+    } else if (scene.demo.ready()) {
         y = drawText(t, font, "dual interpolation  t = " + fmt(scene.demo.t, 2), {x, y}, 13,
                      pal.text);
         y = drawText(t, font, "  joint space", {x, y}, 12, pal.ghost_joint);
@@ -335,9 +360,10 @@ void drawHud(sf::RenderTarget& t, const sf::FloatRect& box, const Scene& scene, 
     y += 10.f;
 
     for (const char* line : {"drag        move target", "A / B       capture pose",
-                             "space       play interpolation", "J           joint space view",
-                             "2 / 3       switch arm", "E           ellipsoid",
-                             "right-click add obstacle", "R           reset"}) {
+                             "space       play interpolation", "S           supervisor playback",
+                             "J           joint space view", "2 / 3       switch arm",
+                             "E           ellipsoid", "right-click add obstacle",
+                             "R           reset"}) {
         y = drawText(t, font, line, {x, y}, 11, pal.text_dim);
     }
 }
@@ -356,6 +382,12 @@ void drawFrame(sf::RenderTarget& t, const Scene& scene, const Camera& cam, const
         drawWorkspaceBounds(t, cam, scene.model, pal);
         drawWorld(t, cam, scene.world, pal);
 
+        if (scene.playback.active && scene.playback.q_raw.size() == scene.q.size()) {
+            // The same command stream driving both arms: the unsupervised one
+            // is what the supervisor is being compared against, not a ghost.
+            drawArm(t, cam, scene.model, scene.playback.q_raw, pal.link_bad, 0.55f);
+        }
+
         if (scene.demo.ready() && scene.demo.q_joint.size() == scene.q.size()) {
             drawTrail(t, cam, scene.demo.trail_joint, pal.ghost_joint);
             drawTrail(t, cam, scene.demo.trail_cart, pal.ghost_cart);
@@ -364,7 +396,22 @@ void drawFrame(sf::RenderTarget& t, const Scene& scene, const Camera& cam, const
         }
 
         drawArm(t, cam, scene.model, scene.q, scene.collision.hit() ? pal.link_bad : pal.link);
-        drawTarget(t, cam, scene.target, pal.target);
+        const bool refused =
+            scene.playback.active && scene.playback.last.failed_check != arm::Check::None;
+        drawTarget(t, cam, scene.target, refused ? pal.accent : pal.target);
+        if (refused && font) {
+            const std::string label = std::string("rejected: ") +
+                                      checkName(scene.playback.last.failed_check) + "  ->  " +
+                                      fallbackName(scene.playback.last.fallback);
+            const sf::Vector2f at = cam.toScreen(scene.target);
+            // Flip the label to the other side of the target rather than let it
+            // run under the panel.
+            const float width_estimate = label.size() * 6.5f;
+            const float px = at.x + 16.f + width_estimate < main.size.x
+                                 ? at.x + 16.f
+                                 : at.x - 16.f - width_estimate;
+            drawText(t, font, label, {std::max(4.f, px), at.y - 8.f}, 13, pal.accent);
+        }
 
         if (scene.show_ellipsoid) {
             const arm::Manipulability m = scene.manipulability();

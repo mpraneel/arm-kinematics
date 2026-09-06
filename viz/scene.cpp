@@ -38,6 +38,7 @@ void Scene::setDof(int n) {
     if (n > 2) q[2] = 0.6;
 
     demo = DualInterp{};
+    playback = SupervisorPlayback{};
     cond_history.clear();
     resetWorld();
     solveIk();
@@ -73,6 +74,7 @@ arm::Manipulability Scene::manipulability() const {
 
 void Scene::update(double dt) {
     stepDemo(dt);
+    stepSupervisorPlayback(dt);
 
     const arm::Manipulability m = manipulability();
     cond_history.push_back(m.condition_number);
@@ -137,6 +139,77 @@ void Scene::stepDemo(double dt) {
     demo.trail_cart.push_back(arm::eePosition(model, demo.q_cart));
 
     if (demo.t >= 1.0) demo.playing = false;
+}
+
+void Scene::startSupervisorPlayback(arm::Fallback fallback, std::uint64_t seed) {
+    // The visualizer shows exactly the scenario the benchmark measures.
+    model = arm::scenario::model();
+    world = arm::scenario::world();
+    demo = DualInterp{};
+
+    const arm::ControllerConfig cc = arm::scenario::controller(seed);
+    playback = SupervisorPlayback{};
+    playback.controller.emplace(model, world, cc);
+    playback.guarded.emplace(model, world,
+                             arm::scenario::supervisor(true, fallback, seed, cc.dt));
+    playback.unguarded.emplace(model, world,
+                               arm::scenario::supervisor(false, fallback, seed, cc.dt));
+
+    const Eigen::VectorXd start =
+        arm::scenario::startConfiguration(model, playback.controller->nominalAt(0.0));
+    playback.guarded->setConfiguration(start);
+    playback.unguarded->setConfiguration(start);
+    playback.q_raw = start;
+    playback.active = true;
+
+    q = start;
+    target = playback.controller->nominalAt(0.0);
+    collision = arm::checkCollision(model, q, world);
+    cond_history.clear();
+    rebuildCSpace();
+}
+
+void Scene::stopSupervisorPlayback() {
+    playback.active = false;
+}
+
+void Scene::stepSupervisorPlayback(double dt) {
+    if (!playback.active || !playback.controller) return;
+
+    const double step_dt = playback.controller->config().dt;
+    playback.accumulator += dt;
+    // Catch up at most a few commands per frame, so a slow frame does not turn
+    // into a burst that nobody can follow.
+    for (int i = 0; i < 4 && playback.accumulator >= step_dt; ++i) {
+        playback.accumulator -= step_dt;
+
+        const arm::Command cmd = playback.controller->next();
+        playback.last = playback.guarded->step(cmd);
+        playback.last_raw = playback.unguarded->step(cmd);
+        playback.q_raw = playback.last_raw.q_after;
+
+        ++playback.commands;
+        if (playback.last.intervened) ++playback.interventions;
+        if (playback.last.failed_check != arm::Check::None) {
+            ++playback.rejections;
+            std::string line = std::string(arm::checkName(playback.last.failed_check)) + "  <- " +
+                               arm::faultNames(cmd.faults);
+            playback.events.push_front(line);
+            while (playback.events.size() > 6) playback.events.pop_back();
+        }
+        if (playback.last_raw.limit_violation || playback.last_raw.velocity_violation ||
+            playback.last_raw.collision) {
+            ++playback.raw_violations;
+        }
+
+        q = playback.last.q_after;
+        target = cmd.target;
+        ik_converged = true;
+        ik_error = (arm::eePosition(model, q) - target).norm();
+        target_reachable = !playback.last.intervened ||
+                           playback.last.failed_check != arm::Check::Reachability;
+        collision = arm::checkCollision(model, q, world);
+    }
 }
 
 void Scene::rebuildCSpace(int resolution) {

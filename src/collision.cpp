@@ -164,9 +164,9 @@ CollisionReport checkCollision(const ArmModel& model, const Eigen::VectorXd& q, 
 CollisionReport checkPath(const ArmModel& model, const Eigen::VectorXd& q0,
                           const Eigen::VectorXd& q1, const World& world, int steps, double margin) {
     const int n = std::max(1, steps);
-    // Interpolate along the shortest wrapped path, which is what the arm
-    // actually takes.
-    const Eigen::VectorXd delta = angleDiff(q1, q0);
+    // Interpolate along the path the arm actually takes, which is not the
+    // wrapped shortest one for a joint that cannot spin past its limits.
+    const Eigen::VectorXd delta = jointDelta(model, q0, q1);
     for (int i = 0; i <= n; ++i) {
         const double t = static_cast<double>(i) / n;
         CollisionReport rep = checkCollision(model, wrapAngles(q0 + t * delta), world, margin);

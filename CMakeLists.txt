@@ -20,6 +20,10 @@ add_library(arm_core
   src/kinematics.cpp
   src/ik.cpp
   src/collision.cpp
+  src/rrt.cpp
+  src/controller.cpp
+  src/supervisor.cpp
+  src/scenario.cpp
 )
 target_include_directories(arm_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_link_libraries(arm_core PUBLIC Eigen3::Eigen)
@@ -37,6 +41,8 @@ if(ARM_BUILD_TESTS)
     tests/test_kinematics.cpp
     tests/test_ik.cpp
     tests/test_collision.cpp
+    tests/test_rrt.cpp
+    tests/test_supervisor.cpp
   )
   target_link_libraries(arm_tests PRIVATE arm_core Catch2::Catch2WithMain)
 
@@ -45,6 +51,10 @@ if(ARM_BUILD_TESTS)
   include(Catch)
   catch_discover_tests(arm_tests)
 endif()
+
+add_executable(arm_bench bench/main.cpp)
+target_link_libraries(arm_bench PRIVATE arm_core)
+target_compile_options(arm_bench PRIVATE -Wall -Wextra)
 
 if(ARM_BUILD_VIZ)
   add_subdirectory(viz)

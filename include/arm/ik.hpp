@@ -48,6 +48,14 @@ AnalyticIkResult filterToLimits(const ArmModel& model, const AnalyticIkResult& i
 std::optional<Eigen::VectorXd> nearestSolution(const AnalyticIkResult& in,
                                                const Eigen::VectorXd& reference);
 
+/// Every closed form branch for a position-only target. A 3R chain is
+/// redundant for a position, so the end effector heading is swept and the
+/// closed form solved at each sample; a 2R chain returns its two branches
+/// directly. Used by the supervisor, which has to check all branches before
+/// rejecting a target: elbow-down may be legal where elbow-up is not.
+std::vector<Eigen::VectorXd> ikBranches(const ArmModel& model, const Eigen::Vector2d& target,
+                                        int orientation_samples = 16, double tol = 1e-9);
+
 struct DlsOptions {
     int max_iterations = 200;
     /// Convergence tolerance on the Cartesian error norm.

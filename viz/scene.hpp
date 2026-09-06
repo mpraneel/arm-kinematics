@@ -1,11 +1,16 @@
 #pragma once
 
 #include <deque>
+#include <optional>
+#include <string>
 #include <vector>
 
 #include "arm/collision.hpp"
+#include "arm/controller.hpp"
 #include "arm/ik.hpp"
 #include "arm/kinematics.hpp"
+#include "arm/scenario.hpp"
+#include "arm/supervisor.hpp"
 
 namespace viz {
 
@@ -37,6 +42,29 @@ struct DualInterp {
     bool ready() const { return has_a && has_b; }
 };
 
+/// The benchmark scenario played back on screen: the same seeded command
+/// stream driving two arms, one behind the supervisor and one not.
+struct SupervisorPlayback {
+    bool active = false;
+    std::optional<arm::ScriptedController> controller;
+    std::optional<arm::Supervisor> guarded;
+    std::optional<arm::Supervisor> unguarded;
+
+    arm::CommandRecord last;      ///< what the supervisor did with this command
+    arm::CommandRecord last_raw;  ///< what the same command did unsupervised
+    Eigen::VectorXd q_raw;
+
+    int commands = 0;
+    int interventions = 0;
+    int rejections = 0;
+    int raw_violations = 0;
+    /// Real time carried over between frames, so playback runs at the
+    /// controller's own rate rather than the frame rate.
+    double accumulator = 0.0;
+    /// The last few rejections, newest first, for the on screen log.
+    std::deque<std::string> events;
+};
+
 enum class View { Workspace, JointSpace };
 
 /// Everything the visualizer shows, with no dependency on the renderer.
@@ -56,6 +84,7 @@ struct Scene {
 
     arm::CollisionReport collision;
     DualInterp demo;
+    SupervisorPlayback playback;
 
     /// Condition number over time, newest last, for the live plot.
     std::deque<double> cond_history;
@@ -88,6 +117,13 @@ struct Scene {
     void playDemo();
     void stopDemo();
     void stepDemo(double dt);
+
+    /// Load the benchmark scenario and start playing it back.
+    void startSupervisorPlayback(arm::Fallback fallback = arm::Fallback::Clamp,
+                                 std::uint64_t seed = 42);
+    void stopSupervisorPlayback();
+    /// Advance playback by `dt` seconds of wall clock.
+    void stepSupervisorPlayback(double dt);
 
     /// Recompute the 2R C-space occupancy grid. No-op for other chains.
     void rebuildCSpace(int resolution = 220);

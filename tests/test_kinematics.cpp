@@ -161,6 +161,24 @@ TEST_CASE("reach describes the annulus", "[model]") {
     CHECK(ArmModel(equal).innerReach() == Approx(0.0));
 }
 
+TEST_CASE("joint displacement respects what a joint can physically do", "[angles]") {
+    Eigen::VectorXd lengths(2);
+    lengths << 1.0, 1.0;
+
+    SECTION("a joint free to spin takes the short way round") {
+        const ArmModel free_arm(lengths, M_PI);
+        const Eigen::VectorXd d = jointDelta(free_arm, vec({3.0, 0.0}), vec({-3.0, 0.0}));
+        CHECK(d[0] == Approx(wrapAngle(-6.0)));  // 0.283, not -6
+        CHECK(std::abs(d[0]) < M_PI);
+    }
+    SECTION("a limited joint has to travel the long way") {
+        // The short way round would pass straight through the end stop.
+        const ArmModel limited(lengths, 2.4);
+        const Eigen::VectorXd d = jointDelta(limited, vec({2.3, 0.0}), vec({-2.3, 0.0}));
+        CHECK(d[0] == Approx(-4.6));
+    }
+}
+
 TEST_CASE("angle wrapping is on the half open interval", "[angles]") {
     CHECK(wrapAngle(0.0) == Approx(0.0));
     CHECK(wrapAngle(M_PI) == Approx(M_PI));
